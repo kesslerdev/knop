@@ -1,6 +1,9 @@
 import { Logger } from 'pino';
 import { ApiRoot } from 'kubernetes-client';
+import { KubernetesObject } from "@kubernetes/client-node";
 import { sync } from 'glob';
+import { readFileSync } from 'fs';
+import { parse } from 'yaml';
 import { createLogger, createClient } from './utils';
 import { Controller } from './controller';
 
@@ -12,6 +15,7 @@ export class OperatorBroker {
   protected started = false;
 
   protected controllers: Controller[] = [];
+  protected crdManifests: KubernetesObject[] = [];
 
   public constructor(private name: string) {
     this.baseLogger = createLogger(this.name);
@@ -26,7 +30,8 @@ export class OperatorBroker {
     }
 
     this.logger.info('Initializing broker');
-    this.client = await createClient(this.logger);
+    this.client = await createClient(this.logger, this.crdManifests);
+
     this.logger.info('Initializing controllers');
 
     for (const ctrl of this.controllers) {
@@ -76,6 +81,36 @@ export class OperatorBroker {
 
     this.logger.info('Controllers stopped');
     this.logger.info('Broker stopped');
+  }
+
+  public loadCRDs(glob: string): number {
+    this.logger.info(`Loading CRDs with glob ${glob}`);
+
+    const paths = sync(glob);
+
+    for (const path of paths) {
+      this.loadCRD(path);
+    }
+    return paths.length;
+  }
+
+  public loadCRD(path: string): void {
+    this.logger.info(`Loading CRD from ${path}`);
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { CRDPath } = require(path);
+
+    if (!CRDPath) {
+      const err = new Error(`Unable to load CRD from ${path}`);
+      this.logger.error(err);
+      throw err;
+    }
+
+    const CRD = parse(readFileSync(CRDPath, 'utf8'));
+
+    this.crdManifests.push(CRD);
+
+    this.logger.info(`Successfully loaded CRD(${CRD.metadata.name}) from ${path}`);
   }
 
   public loadControllers(glob: string): number {
