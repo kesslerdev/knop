@@ -1,8 +1,8 @@
 {
-  "name": "noperator",
+  "name": "knop",
   "version": "1.0.0",
   "description": "Kubernetes operators made easy",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
     "clean": "rimraf coverage build tmp",
     "build": "tsc -p tsconfig.release.json",
