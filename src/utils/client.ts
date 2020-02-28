@@ -1,10 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
 // @ts-ignore
-import { Client, ApiRoot } from 'kubernetes-client';
+import { Client } from 'kubernetes-client';
 import { Logger } from 'pino';
 import { KubernetesObject } from '@kubernetes/client-node';
+import { KubeClient } from '../client';
 
-export const createClient = async (logger: Logger, crds: KubernetesObject[] = []): Promise<ApiRoot> => {
+export const createClient = async (logger: Logger, crds: KubernetesObject[] = []): Promise<KubeClient> => {
   const log = logger.child({
     caller: 'kube-client'
   });
@@ -19,5 +20,5 @@ export const createClient = async (logger: Logger, crds: KubernetesObject[] = []
     log.info(`Successfully loaded CRD(${CRD.metadata.name}) into client`);
   }
 
-  return client;
+  return new KubeClient(log, client);
 }

@@ -7,3 +7,5 @@ export const kubeHash = (object: any) => {
     .update(JSON.stringify({ metadata: { ...metadata, resourceVersion: false }, spec }))
     .digest('hex');
 }
+
+export const HashKey = process.env.STATUS_HASH_KEY || "knopHashKey";

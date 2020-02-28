@@ -1,0 +1,155 @@
+import { ApiRoot, Apis } from 'kubernetes-client';
+import { Logger } from 'pino';
+import { finished } from "stream";
+import { HashKey, kubeHash } from "./utils/hash";
+
+export interface ResourceType {
+  apiGroup: string;
+  apiVersion: string;
+  pluralKind: string;
+  namespace?: string;
+}
+
+interface ResourceEvent {
+  meta: ResourceMeta;
+  type: ResourceEventType;
+  object: any;
+}
+
+interface ResourceMeta {
+  name: string;
+  namespace: string;
+  id: string;
+  resourceVersion: string;
+  apiVersion: string;
+  kind: string;
+}
+
+export enum ResourceEventType {
+  Added = 'ADDED',
+  Modified = 'MODIFIED',
+  Deleted = 'DELETED'
+}
+
+
+export class KubeClient implements ApiRoot {
+
+  public constructor(private logger: Logger, private client: ApiRoot) { }
+
+  addCustomResourceDefinition(schema: object): void {
+    return this.client.addCustomResourceDefinition(schema);
+  }
+
+  get api(): import("kubernetes-client").Api {
+    return this.client.api
+  }
+
+  get apis(): Apis {
+    return this.client.apis
+  }
+
+  get log(): import("kubernetes-client").Logs {
+    return this.client.log
+  }
+
+  get logs(): import("kubernetes-client").Logs {
+    return this.client.logs
+  }
+
+  get version(): import("kubernetes-client").Version {
+    return this.client.version
+  }
+
+  public async getStream(res: ResourceType): Promise<any> {
+    if (res.namespace && res.namespace.length) {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // @ts-ignore
+      return this.client.apis[res.apiGroup][res.apiVersion]
+        .watch.namespace(res.namespace)[res.pluralKind].getObjectStream()
+    } else {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+      // @ts-ignore
+      return this.client.apis[res.apiGroup][res.apiVersion]
+        .watch[res.pluralKind].getObjectStream()
+    }
+  }
+
+  public async watchResource(res: ResourceType, onEvent: (event: ResourceEvent) => Promise<void>): Promise<() => void> {
+    const startDate = Date.now();
+    let started = true;
+    let stop: () => void;
+    const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
+    this.logger.info(`Start Streaming ${suffix}`);
+
+    const readStream = await this.getStream(res);
+
+    finished(readStream, async (err) => {
+      if (started) {
+        const range = Date.now() - startDate;
+        if (err) {
+          this.logger.error(`Stream ${suffix} is failing, restarting ${range}`, err);
+        } else {
+          this.logger.info(`Stream ${suffix} is done, restarting ${range}`);
+        }
+        stop = await this.watchResource(res, onEvent);
+      }
+    });
+
+    readStream.on("data", (obj: ResourceEvent) => onEvent(obj));
+
+    return (): void => {
+      this.logger.info(`Stop Streaming ${suffix}`);
+      started = false;
+      readStream.stop();
+
+      if (stop) {
+        stop();
+      }
+    }
+  }
+
+  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent) => Promise<any>): Promise<() => void> {
+    const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
+
+    return this.watchResource(res, async (event: ResourceEvent): Promise<void> => {
+      const { object, type } = event;
+
+      if (type === ResourceEventType.Added || type === ResourceEventType.Modified) {
+        // creation or update => check last operator execution
+        if (object?.status?.[HashKey] === kubeHash(object)) {
+          this.logger.info(`Resource ${suffix} already handled!`);
+
+          return;
+        }
+
+        // Run Handler
+        const status = await onEvent(event);
+
+        // Patch status
+        await this.updateHash(res, {
+          ...object, status: {
+            ...object.status,
+            ...status,
+          }
+        });
+      } else if (type === ResourceEventType.Deleted) {
+        return onEvent(event);
+      }
+    })
+  }
+
+  public async updateHash(res: ResourceType, object: any): Promise<void> {
+    object.status = {
+      ...object.status,
+      [HashKey]: kubeHash(object),
+    }
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+    // @ts-ignore
+    return this.client.apis[res.apiGroup][res.apiVersion]
+      .namespaces(object.metadata.namespace)
+    [res.pluralKind](object.metadata.name).status.put({
+      body: object,
+    });
+  }
+}

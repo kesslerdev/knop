@@ -1,19 +1,20 @@
 import { Logger } from 'pino';
-import { ApiRoot } from 'kubernetes-client';
 import { KubernetesObject } from "@kubernetes/client-node";
 import { sync } from 'glob';
 import { readFileSync } from 'fs';
 import { parse } from 'yaml';
 import { createLogger, createClient } from './utils';
-import { Controller } from './controller';
+import { Controller, ControllerConstructor } from './controller';
+import { KubeClient } from './client';
 
 export class OperatorBroker {
   protected baseLogger: Logger;
   protected logger: Logger;
-  protected client: ApiRoot;
+  protected client: KubeClient;
   protected initialized = false;
   protected started = false;
 
+  protected controllersClasses: ControllerConstructor[] = [];
   protected controllers: Controller[] = [];
   protected crdManifests: KubernetesObject[] = [];
 
@@ -34,8 +35,10 @@ export class OperatorBroker {
 
     this.logger.info('Initializing controllers');
 
-    for (const ctrl of this.controllers) {
-      await ctrl.init();
+    for (const ctrl of this.controllersClasses) {
+      const instance = new ctrl(this);
+      this.controllers.push(instance);
+      await instance.init();
     }
 
     this.logger.info('Controllers initialized');
@@ -124,11 +127,11 @@ export class OperatorBroker {
     return paths.length;
   }
 
-  public loadController(path: string): Controller {
+  public loadController(path: string): ControllerConstructor {
     this.logger.info(`Loading controller from ${path}`);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ctrl: Controller = require(path).default;
+    const ctrl: ControllerConstructor = require(path).default;
     if (!ctrl) {
       const err = new Error(`Unable to load controller from ${path}`);
       this.logger.error(err);
@@ -137,19 +140,18 @@ export class OperatorBroker {
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
     // @ts-ignore
-    const instance = new ctrl(this);
     this.logger.info(`Successfully loaded controller(${ctrl.name}) from ${path}`);
 
-    this.controllers.push(instance);
+    this.controllersClasses.push(ctrl);
 
-    return instance;
+    return ctrl;
   }
 
   public getLogger(): Logger {
     return this.logger;
   }
 
-  public getClient(): ApiRoot {
+  public getClient(): KubeClient {
     return this.client;
   }
 }
