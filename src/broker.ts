@@ -64,6 +64,7 @@ export class OperatorBroker {
 
     this.logger.info('Controllers started');
     this.logger.info('Broker started');
+    this.started = true;
   }
 
   public async stop(passWithoutError = false): Promise<void> {

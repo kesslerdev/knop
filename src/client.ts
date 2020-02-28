@@ -1,9 +1,10 @@
 import { ApiRoot, Apis } from 'kubernetes-client';
 import { Logger } from 'pino';
 import { finished } from "stream";
+import { ReadStream } from 'fs';
+import humanizeDuration from 'humanize-duration';
 import { HashKey, kubeHash } from "./utils/hash";
 import { KubeObject, KubeStatus } from './types';
-import { ReadStream } from 'fs';
 
 export interface ResourceType {
   apiGroup: string;
@@ -89,9 +90,9 @@ export class KubeClient implements ApiRoot {
       if (started) {
         const range = Date.now() - startDate;
         if (err) {
-          this.logger.error(`Stream ${suffix} is failing, restarting ${range}`, err);
+          this.logger.error(`Stream ${suffix} is failing, restarting ${humanizeDuration(range)}`, err);
         } else {
-          this.logger.info(`Stream ${suffix} is done, restarting ${range}`);
+          this.logger.info(`Stream ${suffix} is done, restarting ${humanizeDuration(range)}`);
         }
         stop = await this.watchResource(res, onEvent);
       }
