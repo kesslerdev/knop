@@ -2,6 +2,8 @@ import { ApiRoot, Apis } from 'kubernetes-client';
 import { Logger } from 'pino';
 import { finished } from "stream";
 import { HashKey, kubeHash } from "./utils/hash";
+import { KubeObject, KubeStatus } from './types';
+import { ReadStream } from 'fs';
 
 export interface ResourceType {
   apiGroup: string;
@@ -13,7 +15,7 @@ export interface ResourceType {
 interface ResourceEvent {
   meta: ResourceMeta;
   type: ResourceEventType;
-  object: any;
+  object: KubeObject;
 }
 
 interface ResourceMeta {
@@ -60,7 +62,7 @@ export class KubeClient implements ApiRoot {
     return this.client.version
   }
 
-  public async getStream(res: ResourceType): Promise<any> {
+  public async getStream(res: ResourceType): Promise<ReadStream> {
     if (res.namespace && res.namespace.length) {
       // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
       // @ts-ignore
@@ -100,7 +102,7 @@ export class KubeClient implements ApiRoot {
     return (): void => {
       this.logger.info(`Stop Streaming ${suffix}`);
       started = false;
-      readStream.stop();
+      readStream.close();
 
       if (stop) {
         stop();
@@ -108,7 +110,7 @@ export class KubeClient implements ApiRoot {
     }
   }
 
-  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent) => Promise<any>): Promise<() => void> {
+  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent) => Promise<KubeStatus | boolean>): Promise<() => void> {
     const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
 
     return this.watchResource(res, async (event: ResourceEvent): Promise<void> => {
@@ -123,7 +125,7 @@ export class KubeClient implements ApiRoot {
         }
 
         // Run Handler
-        const status = await onEvent(event);
+        const status: KubeStatus = (await onEvent(event) as KubeStatus);
 
         // Patch status
         await this.updateHash(res, {
@@ -133,12 +135,12 @@ export class KubeClient implements ApiRoot {
           }
         });
       } else if (type === ResourceEventType.Deleted) {
-        return onEvent(event);
+        await onEvent(event);
       }
     })
   }
 
-  public async updateHash(res: ResourceType, object: any): Promise<void> {
+  public async updateHash(res: ResourceType, object: KubeObject): Promise<void> {
     object.status = {
       ...object.status,
       [HashKey]: kubeHash(object),

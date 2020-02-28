@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
+import { KubeObject } from '../types';
 
-export const kubeHash = (object: any) => {
+export const kubeHash = (object: KubeObject): string => {
   const { metadata, spec } = object;
 
   return createHmac('sha256', process.env.HASHER_KEY || 'knop')

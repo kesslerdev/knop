@@ -1,6 +1,6 @@
 {
   "name": "knop",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Kubernetes operators made easy",
   "main": "build/src/index.js",
   "scripts": {
