@@ -8,20 +8,18 @@ npm install -g knop-cli
 
 # or using knop-cli with npx
 npx -p knop-cli knop
-```
 
-```bash
 # create an operator projet into my-operator directory (package name)
 npx -p knop-cli knop new operator --name MyOperator
-```
 
-```bash
 # add a controlled crd (api)
 npx -p knop-cli knop new api --api-version svc.docaposte.cloud/v1alpha1 --kind Elasticsearch
-```
-```bash
+
 # add the corresponding crd controller (api)
 npx -p knop-cli knop new crd-controller --api-version svc.docaposte.cloud/v1alpha1 --kind Elasticsearch
+
+# run operator in dev mode
+npm run dev
 ```
 
 ## Development
@@ -35,6 +33,52 @@ npx -p knop-cli knop new crd-controller --api-version svc.docaposte.cloud/v1alph
 - `npm run lint` : check code with eslint
 - `npm run build` : build (compile) operator sources files
 - `npm run build:watch` : build with watching
+
+### Generators
+
+#### Operator
+
+Generate a new node project for an operator
+```bash
+knop new operator --name "MyOperator"
+```
+
+only name is required.
+
+|parameter|value|
+|-|-|
+|name| Humanized operator name, (underscore + dash for package name)|
+|orgName | Humanized Organization name |
+|org| npm organization|
+| repo | git repository |
+|dockerRepo | docker repository|
+
+#### Api (CRD)
+
+Generate a new CRD (yaml files & types)
+```bash
+knop new api --api-version svc.docaposte.cloud/v1alpha1 --kind Elasticsearch
+```
+
+api-version & kind are required
+
+|parameter|value|
+|-|-|
+|api-version| kubernetes api version with group (ex svc.docaposte.cloud/v1alpha1) |
+|kind | kubernetes kind |
+
+#### CRD Controller
+Generate a new CRD Controller, handle CR create/update/delete with deduplication (dosent fire if CR doesn't change)
+```bash
+knop new crd-controller --api-version svc.docaposte.cloud/v1alpha1 --kind Elasticsearch
+```
+
+api-version & kind are required (refers to managed CRD)
+
+|parameter|value|
+|-|-|
+|api-version| kubernetes api version with group (ex svc.docaposte.cloud/v1alpha1) |
+|kind | kubernetes kind |
 
 ## Deployment
 
