@@ -1,3 +1,3 @@
 export * from './logger';
 export * from './client';
-export * from './hash';
+export * from './lastConfig';

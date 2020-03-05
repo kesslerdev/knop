@@ -3,8 +3,8 @@ import { Logger } from 'pino';
 import { finished } from "stream";
 import { ReadStream } from 'fs';
 import humanizeDuration from 'humanize-duration';
-import { HashKey, kubeHash } from "./utils/hash";
 import { KubeObject, KubeStatus } from './types';
+import { isLastConfig, inferLastConfig, lastConfigAnnotation } from './utils';
 
 export interface ResourceType {
   apiGroup: string;
@@ -82,7 +82,7 @@ export class KubeClient implements ApiRoot {
     let started = true;
     let stop: () => void;
     const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
-    this.logger.info(`Start Streaming ${suffix}`);
+    this.logger.debug(`Start Streaming ${suffix}`);
 
     const readStream = await this.getStream(res);
 
@@ -90,9 +90,9 @@ export class KubeClient implements ApiRoot {
       if (started) {
         const range = Date.now() - startDate;
         if (err) {
-          this.logger.error(`Stream ${suffix} is failing, restarting ${humanizeDuration(range)}`, err);
+          this.logger.warn(`Stream ${suffix} is failing, restarting ${humanizeDuration(range)}`, err);
         } else {
-          this.logger.info(`Stream ${suffix} is done, restarting ${humanizeDuration(range)}`);
+          this.logger.debug(`Stream ${suffix} is done, restarting ${humanizeDuration(range)}`);
         }
         stop = await this.watchResource(res, onEvent);
       }
@@ -101,7 +101,7 @@ export class KubeClient implements ApiRoot {
     readStream.on("data", (obj: ResourceEvent) => onEvent(obj));
 
     return (): void => {
-      this.logger.info(`Stop Streaming ${suffix}`);
+      this.logger.debug(`Stop Streaming ${suffix}`);
       started = false;
       readStream.close();
 
@@ -119,8 +119,8 @@ export class KubeClient implements ApiRoot {
 
       if (type === ResourceEventType.Added || type === ResourceEventType.Modified) {
         // creation or update => check last operator execution
-        if (object?.status?.[HashKey] === kubeHash(object)) {
-          this.logger.info(`Resource ${suffix} already handled!`);
+        if (isLastConfig(object)) {
+          this.logger.debug(`Resource ${suffix} already handled!`);
 
           return;
         }
@@ -128,10 +128,13 @@ export class KubeClient implements ApiRoot {
         // Run Handler
         const status: KubeStatus = (await onEvent(event) as KubeStatus);
 
+        // Patch last config
+        const newObj = await this.updateLastConfig(res, object);
+
         // Patch status
-        await this.updateHash(res, {
-          ...object, status: {
-            ...object.status,
+        await this.updateStatus(res, {
+          ...newObj, status: {
+            ...newObj.status,
             ...status,
           }
         });
@@ -141,12 +144,7 @@ export class KubeClient implements ApiRoot {
     })
   }
 
-  public async updateHash(res: ResourceType, object: KubeObject): Promise<void> {
-    object.status = {
-      ...object.status,
-      [HashKey]: kubeHash(object),
-    }
-
+  public async updateStatus(res: ResourceType, object: KubeObject): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
     // @ts-ignore
     return this.client.apis[res.apiGroup][res.apiVersion]
@@ -154,5 +152,25 @@ export class KubeClient implements ApiRoot {
     [res.pluralKind](object.metadata.name).status.put({
       body: object,
     });
+  }
+
+  public async updateLastConfig(res: ResourceType, object: KubeObject): Promise<KubeObject> {
+    const anno = inferLastConfig(object);
+    object.metadata = {
+      ...object.metadata,
+      annotations: {
+        ...object.metadata.annotations,
+        [lastConfigAnnotation]: JSON.stringify(anno),
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
+    // @ts-ignore
+    const { body } = await  this.client.apis[res.apiGroup][res.apiVersion]
+      .namespaces(object.metadata.namespace)
+    [res.pluralKind](object.metadata.name).put({
+      body: object,
+    });
+
+    return body;
   }
 }

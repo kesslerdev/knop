@@ -91,13 +91,12 @@ kubectl apply -f ./deploy/crds/*_crd.yaml
 kubectl apply -f ./deploy/*.yaml
 ```
 
-### Operator Env options running
+### Operator runtime Env options
 
 | Variable          | Default       | Info                                                                                 |
 |-------------------|---------------|--------------------------------------------------------------------------------------|
 | `NODE_ENV`        | null          |                                                                                      |
 | `LOGGER_LEVEL`    | `info`        | see [pino level ](https://getpino.io/#/docs/api?id=loggerlevel-string-gettersetter ) |
-| `HASHER_KEY`      | `knop`        | key used to hash resource definition for tracking                                    |
-| `STATUS_HASH_KEY` | `knopHashKey` | key used in resource status for tracking                                             |
+| `LAST_CONFIG_ANNOTATION` | `knop.skimia.org/last-applied-configuration` | annotation used in resource for storing changes                                             |
 | `WATCH_NAMESPACE` | null          | When deployed it take the namespace of pod                                           |
 | `REGISTER_CRD`    | `0`           | Unused now, create CRD in kubernetes at startup (update if exists)                   |
