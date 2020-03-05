@@ -4,7 +4,7 @@ import { finished } from "stream";
 import { ReadStream } from 'fs';
 import humanizeDuration from 'humanize-duration';
 import { KubeObject, KubeStatus } from './types';
-import { isLastConfig, inferLastConfig, lastConfigAnnotation } from './utils';
+import { isLastConfig, inferLastConfig, lastConfigAnnotation, differences } from './utils';
 
 export interface ResourceType {
   apiGroup: string;
@@ -13,13 +13,13 @@ export interface ResourceType {
   namespace?: string;
 }
 
-interface ResourceEvent {
+export interface ResourceEvent {
   meta: ResourceMeta;
   type: ResourceEventType;
   object: KubeObject;
 }
 
-interface ResourceMeta {
+export interface ResourceMeta {
   name: string;
   namespace: string;
   id: string;
@@ -111,7 +111,7 @@ export class KubeClient implements ApiRoot {
     }
   }
 
-  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent) => Promise<KubeStatus | boolean>): Promise<() => void> {
+  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent, diff: object | false) => Promise<KubeStatus | boolean>): Promise<() => void> {
     const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
 
     return this.watchResource(res, async (event: ResourceEvent): Promise<void> => {
@@ -126,7 +126,10 @@ export class KubeClient implements ApiRoot {
         }
 
         // Run Handler
-        const status: KubeStatus = (await onEvent(event) as KubeStatus);
+        const status: KubeStatus = (await onEvent(
+          event,
+          event.type === ResourceEventType.Modified ? differences(event.object) : false
+        ) as KubeStatus);
 
         // Patch last config
         const newObj = await this.updateLastConfig(res, object);
@@ -139,7 +142,7 @@ export class KubeClient implements ApiRoot {
           }
         });
       } else if (type === ResourceEventType.Deleted) {
-        await onEvent(event);
+        await onEvent(event, false);
       }
     })
   }
@@ -165,7 +168,7 @@ export class KubeClient implements ApiRoot {
     }
     // eslint-disable-next-line @typescript-eslint/ban-ts-ignore
     // @ts-ignore
-    const { body } = await  this.client.apis[res.apiGroup][res.apiVersion]
+    const { body } = await this.client.apis[res.apiGroup][res.apiVersion]
       .namespaces(object.metadata.namespace)
     [res.pluralKind](object.metadata.name).put({
       body: object,

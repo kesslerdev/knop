@@ -54,8 +54,6 @@ export const differences = (object: KubeObject): Partial<KubeObject> => {
 export const isLastConfig = (object: KubeObject): boolean => {
   const diffs = differences(object);
 
-  console.log(diffs);
-
   return Object.keys(diffs).length === 0;
 }
 
