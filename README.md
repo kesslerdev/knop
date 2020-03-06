@@ -80,6 +80,16 @@ api-version & kind are required (refers to managed CRD)
 |api-version| kubernetes api version with group (ex svc.docaposte.cloud/v1alpha1) |
 |kind | kubernetes kind |
 
+### Operator Engines
+
+#### KudoLikeEngine
+
+#### Templating
+
+it uses [`consolidate.js`](https://github.com/tj/consolidate.js) for agnostic templating engine support (default to [handlebars](https://github.com/wycats/handlebars.js/))
+
+
+
 ## Deployment
 
 ```bash

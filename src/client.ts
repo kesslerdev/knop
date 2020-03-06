@@ -4,7 +4,7 @@ import { finished } from "stream";
 import { ReadStream } from 'fs';
 import humanizeDuration from 'humanize-duration';
 import { KubeObject, KubeStatus } from './types';
-import { isLastConfig, inferLastConfig, lastConfigAnnotation, differences } from './utils';
+import { isLastConfig, inferLastConfig, lastConfigAnnotation, DiffResult, kubeDifferences  } from './utils';
 
 export interface ResourceType {
   apiGroup: string;
@@ -111,7 +111,7 @@ export class KubeClient implements ApiRoot {
     }
   }
 
-  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent, diff: object | false) => Promise<KubeStatus | boolean>): Promise<() => void> {
+  public async watchUniqueResource(res: ResourceType, onEvent: (event: ResourceEvent, diff: DiffResult | false) => Promise<KubeStatus | boolean>): Promise<() => void> {
     const suffix = `${res.pluralKind}[${res.apiGroup}/${res.apiVersion}] on ns ${res.namespace || '*'}`
 
     return this.watchResource(res, async (event: ResourceEvent): Promise<void> => {
@@ -128,7 +128,7 @@ export class KubeClient implements ApiRoot {
         // Run Handler
         const status: KubeStatus = (await onEvent(
           event,
-          event.type === ResourceEventType.Modified ? differences(event.object) : false
+          event.type === ResourceEventType.Modified ? kubeDifferences(event.object) : false
         ) as KubeStatus);
 
         // Patch last config
